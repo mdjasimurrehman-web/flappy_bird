@@ -30,13 +30,11 @@
       touch-action: none;
       box-shadow: 0 0 30px rgba(0,200,255,0.2);
     }
-
-    /* ✅ HIDDEN INPUT FOR MOBILE KEYBOARD */
     #mobileInput {
       position: fixed;
-      top: -9999px;
-      left: -9999px;
-      width: 1px;
+      bottom: 0;
+      left: 0;
+      width: 100%;
       height: 1px;
       opacity: 0;
       border: none;
@@ -44,19 +42,19 @@
       background: transparent;
       color: transparent;
       font-size: 16px;
+      pointer-events: none;
+      z-index: 999;
     }
   </style>
 </head>
 <body>
   <canvas id="gameCanvas"></canvas>
-  
-  <!-- ✅ HIDDEN INPUT FOR MOBILE KEYBOARD -->
-  <input 
-    type="text" 
-    id="mobileInput" 
-    autocomplete="off" 
-    autocorrect="off" 
-    autocapitalize="off" 
+  <input
+    type="text"
+    id="mobileInput"
+    autocomplete="off"
+    autocorrect="off"
+    autocapitalize="off"
     spellcheck="false"
   />
 
@@ -77,8 +75,39 @@
       canvas.width = W;
       canvas.height = H;
 
-      // ✅ MOBILE INPUT ELEMENT
       const mobileInput = document.getElementById('mobileInput');
+
+      // ✅ AUDIO CONTEXT TO UNLOCK ANDROID AUDIO
+      let audioUnlocked = false;
+
+      function unlockAudio() {
+        if (audioUnlocked) return;
+        // ✅ CREATE SILENT AUDIO CONTEXT TO UNLOCK ANDROID
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+          const ctx = new AudioContext();
+          const buffer = ctx.createBuffer(1, 1, 22050);
+          const source = ctx.createBufferSource();
+          source.buffer = buffer;
+          source.connect(ctx.destination);
+          source.start(0);
+          ctx.resume().then(() => {
+            audioUnlocked = true;
+          });
+        }
+
+        // ✅ ALSO TRY PLAYING ALL AUDIO ELEMENTS SILENTLY
+        const music = assets['bg_music'];
+        if (music && music instanceof HTMLAudioElement) {
+          music.volume = 0;
+          music.play().then(() => {
+            music.pause();
+            music.currentTime = 0;
+            music.volume = 0.45;
+            audioUnlocked = true;
+          }).catch(() => {});
+        }
+      }
 
       function resizeCanvas() {
         const scale = Math.min(window.innerWidth / W, window.innerHeight / H);
@@ -88,25 +117,22 @@
       window.addEventListener('resize', resizeCanvas);
       resizeCanvas();
 
-      // ✅ FOCUS MOBILE INPUT TO OPEN KEYBOARD
       function openMobileKeyboard() {
+        mobileInput.style.opacity = '0';
+        mobileInput.style.pointerEvents = 'auto';
         mobileInput.value = '';
-        mobileInput.style.top = '50%';
-        mobileInput.style.left = '50%';
+        mobileInput.removeAttribute('readonly');
         mobileInput.focus();
-        setTimeout(() => {
-          mobileInput.style.top = '-9999px';
-          mobileInput.style.left = '-9999px';
-        }, 100);
+        mobileInput.click();
       }
 
-      // ✅ CLOSE MOBILE KEYBOARD
       function closeMobileKeyboard() {
+        mobileInput.setAttribute('readonly', true);
         mobileInput.blur();
+        mobileInput.style.pointerEvents = 'none';
       }
 
-      // ✅ LISTEN TO MOBILE INPUT
-      mobileInput.addEventListener('input', function(e) {
+      mobileInput.addEventListener('input', function() {
         const val = mobileInput.value;
         if (state === 'nameEntry') {
           nameInput = val.replace(/[^a-zA-Z0-9]/g, '').slice(0, 12);
@@ -277,12 +303,22 @@
         }
       }
 
+      // ✅ FIXED PLAY MUSIC - RETRIES ON ANDROID
       function playMusic() {
         const music = assets['bg_music'];
         if (music && music instanceof HTMLAudioElement) {
           music.loop = true;
           music.volume = 0.45;
-          music.play().catch(() => {});
+          music.currentTime = 0;
+          const playPromise = music.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(() => {
+              // ✅ RETRY AFTER SHORT DELAY FOR ANDROID
+              setTimeout(() => {
+                music.play().catch(() => {});
+              }, 300);
+            });
+          }
         }
       }
 
@@ -491,12 +527,16 @@
         e.preventDefault();
         const { x, y } = getPos(e);
 
+        // ✅ UNLOCK AUDIO ON FIRST TAP
+        unlockAudio();
+
         if (state === 'home') {
           if (leaderboardBtn && leaderboardBtn.contains(x, y)) {
             state = 'leaderboard';
             stopDie();
             return;
           }
+          // ✅ PLAY MUSIC DIRECTLY ON TAP
           state = 'playing';
           playMusic();
           return;
@@ -520,10 +560,7 @@
             }
             return;
           }
-          // ✅ TAP ON INPUT BOX TO OPEN KEYBOARD
-          if (x >= W/2-100 && x <= W/2+100 && y >= 260 && y <= 300) {
-            openMobileKeyboard();
-          }
+          openMobileKeyboard();
           return;
         }
 
@@ -547,10 +584,7 @@
             }, 1500);
             return;
           }
-          // ✅ TAP ON INPUT BOX TO OPEN KEYBOARD
-          if (x >= W/2-100 && x <= W/2+100 && y >= 260 && y <= 300) {
-            openMobileKeyboard();
-          }
+          openMobileKeyboard();
           return;
         }
 
@@ -568,7 +602,6 @@
             isEnteringName = true;
             nameInput = '';
             editingName = null;
-            // ✅ OPEN KEYBOARD WHEN ADD NAME IS CLICKED
             openMobileKeyboard();
             return;
           }
@@ -583,7 +616,6 @@
                   editingName = entry.name;
                   state = 'nameEntry';
                   isEnteringName = true;
-                  // ✅ OPEN KEYBOARD WHEN EDITING NAME
                   openMobileKeyboard();
                   return;
                 }
@@ -606,7 +638,6 @@
                     passwordMessage = '';
                     rankClickCount = 0;
                     selectedRank = null;
-                    // ✅ OPEN KEYBOARD FOR PASSWORD
                     openMobileKeyboard();
                     if (rankClickTimer) {
                       clearTimeout(rankClickTimer);
@@ -647,9 +678,7 @@
           return;
         }
 
-        if (state === 'countdown') {
-          return;
-        }
+        if (state === 'countdown') { return; }
 
         if (state === 'gameover') {
           if (restartBtn.contains(x, y)) {
@@ -785,7 +814,6 @@
         } else {
           ctx.fillText('Enter your name:', W/2, 210);
         }
-        // ✅ INPUT BOX WITH GLOW TO SHOW IT IS ACTIVE
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(W/2-100, 260, 200, 40);
         ctx.strokeStyle = '#ffd700';
@@ -796,7 +824,7 @@
         ctx.fillText(nameInput + (Date.now() % 1000 < 500 ? '_' : ''), W/2, 285);
         ctx.font = 'bold 16px "Arial", sans-serif';
         ctx.fillStyle = '#ffd700';
-        ctx.fillText('Tap the box above to type', W/2, 330);
+        ctx.fillText('Tap screen to type', W/2, 330);
         ctx.fillText('Press SAVE when done', W/2, 355);
         if (saveNameBtn) {
           ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -816,7 +844,7 @@
         ctx.fillText('ENTER PASSWORD', W/2, 150);
         ctx.font = 'bold 20px "Arial", sans-serif';
         ctx.fillStyle = '#aaa';
-        ctx.fillText(`Delete name: ${nameToDelete || ''}`, W/2, 210);
+        ctx.fillText(`Delete: ${nameToDelete || ''}`, W/2, 210);
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(W/2-100, 260, 200, 40);
         ctx.strokeStyle = '#ffd700';
@@ -828,9 +856,8 @@
         ctx.fillText(hiddenPassword + (Date.now() % 1000 < 500 ? '_' : ''), W/2, 285);
         ctx.font = 'bold 16px "Arial", sans-serif';
         ctx.fillStyle = '#ffd700';
-        ctx.fillText('Tap the box above to type', W/2, 330);
+        ctx.fillText('Tap screen to type', W/2, 330);
         if (passwordMessage) {
-          ctx.font = 'bold 16px "Arial", sans-serif';
           ctx.fillStyle = passwordMessage.includes('Wrong') ? '#ff6b6b' : '#6bff6b';
           ctx.fillText(passwordMessage, W/2, 355);
         }
