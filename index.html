@@ -30,10 +30,35 @@
       touch-action: none;
       box-shadow: 0 0 30px rgba(0,200,255,0.2);
     }
+
+    /* ✅ HIDDEN INPUT FOR MOBILE KEYBOARD */
+    #mobileInput {
+      position: fixed;
+      top: -9999px;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: transparent;
+      font-size: 16px;
+    }
   </style>
 </head>
 <body>
   <canvas id="gameCanvas"></canvas>
+  
+  <!-- ✅ HIDDEN INPUT FOR MOBILE KEYBOARD -->
+  <input 
+    type="text" 
+    id="mobileInput" 
+    autocomplete="off" 
+    autocorrect="off" 
+    autocapitalize="off" 
+    spellcheck="false"
+  />
 
   <script>
     (function() {
@@ -52,6 +77,9 @@
       canvas.width = W;
       canvas.height = H;
 
+      // ✅ MOBILE INPUT ELEMENT
+      const mobileInput = document.getElementById('mobileInput');
+
       function resizeCanvas() {
         const scale = Math.min(window.innerWidth / W, window.innerHeight / H);
         canvas.style.width = (W * scale) + 'px';
@@ -59,6 +87,84 @@
       }
       window.addEventListener('resize', resizeCanvas);
       resizeCanvas();
+
+      // ✅ FOCUS MOBILE INPUT TO OPEN KEYBOARD
+      function openMobileKeyboard() {
+        mobileInput.value = '';
+        mobileInput.style.top = '50%';
+        mobileInput.style.left = '50%';
+        mobileInput.focus();
+        setTimeout(() => {
+          mobileInput.style.top = '-9999px';
+          mobileInput.style.left = '-9999px';
+        }, 100);
+      }
+
+      // ✅ CLOSE MOBILE KEYBOARD
+      function closeMobileKeyboard() {
+        mobileInput.blur();
+      }
+
+      // ✅ LISTEN TO MOBILE INPUT
+      mobileInput.addEventListener('input', function(e) {
+        const val = mobileInput.value;
+        if (state === 'nameEntry') {
+          nameInput = val.replace(/[^a-zA-Z0-9]/g, '').slice(0, 12);
+          mobileInput.value = nameInput;
+        } else if (state === 'passwordEntry') {
+          passwordInput = val.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+          mobileInput.value = passwordInput;
+        }
+      });
+
+      mobileInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (state === 'nameEntry') {
+            if (nameInput.trim() !== '') {
+              if (editingName) {
+                updateName(editingName, nameInput.trim());
+                if (playerName === editingName) {
+                  playerName = nameInput.trim();
+                }
+              } else {
+                playerName = nameInput.trim();
+              }
+              state = 'leaderboard';
+              isEnteringName = false;
+              editingName = null;
+              closeMobileKeyboard();
+            }
+          } else if (state === 'passwordEntry') {
+            const enteredPassword = passwordInput.trim();
+            if (enteredPassword === DELETE_PASSWORD) {
+              if (nameToDelete) {
+                deleteNameFromLeaderboard(nameToDelete);
+                passwordMessage = 'Name deleted successfully!';
+              }
+            } else {
+              passwordMessage = 'Wrong password!';
+            }
+            setTimeout(() => {
+              state = 'leaderboard';
+              passwordInput = '';
+              nameToDelete = null;
+              passwordMessage = '';
+              closeMobileKeyboard();
+            }, 1500);
+          }
+        }
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          if (state === 'nameEntry') {
+            nameInput = nameInput.slice(0, -1);
+            mobileInput.value = nameInput;
+          } else if (state === 'passwordEntry') {
+            passwordInput = passwordInput.slice(0, -1);
+            mobileInput.value = passwordInput;
+          }
+        }
+      });
 
       let leaderboard = [];
       try {
@@ -94,7 +200,7 @@
         leaderboard = leaderboard.filter(entry => entry.name !== name);
         saveLeaderboard();
       }
-      
+
       function updateName(oldName, newName) {
         const index = leaderboard.findIndex(entry => entry.name === oldName);
         if (index !== -1) {
@@ -129,7 +235,6 @@
         });
       }
 
-      // ✅ UPDATED ASSET PATHS
       async function loadAllAssets() {
         await Promise.all([
           loadImage('bird',         'assets/BIRD.jpg'),
@@ -188,14 +293,14 @@
           music.currentTime = 0;
         }
       }
-      
+
       function pauseMusic() {
         const music = assets['bg_music'];
         if (music && music instanceof HTMLAudioElement) {
           music.pause();
         }
       }
-      
+
       function resumeMusic() {
         const music = assets['bg_music'];
         if (music && music instanceof HTMLAudioElement) {
@@ -210,7 +315,7 @@
           sfx.play().catch(() => {});
         }
       }
-      
+
       function stopDie() {
         const sfx = assets['die_sound'];
         if (sfx && sfx instanceof HTMLAudioElement) {
@@ -305,16 +410,16 @@
       let state = 'home';
       let bird, pipes, score;
       let pauseBtn, homeBtn, resumeBtn, restartBtn, homeFromGameoverBtn, leaderboardBtn, viewLeaderboardBtn, backFromLeaderboardBtn, saveNameBtn, addNameBtn, submitPasswordBtn;
-      
+
       let countdownValue = 5;
       let countdownInterval = null;
-      
+
       let isEnteringName = false;
       let playerName = '';
       let nameInput = '';
       let editingName = null;
       let pendingScore = 0;
-      
+
       let passwordInput = '';
       let nameToDelete = null;
       let rankClickCount = 0;
@@ -363,6 +468,7 @@
         stopMusic();
         initGame();
         state = 'home';
+        closeMobileKeyboard();
       }
 
       function getPos(e) {
@@ -410,8 +516,13 @@
               state = 'leaderboard';
               isEnteringName = false;
               editingName = null;
+              closeMobileKeyboard();
             }
             return;
+          }
+          // ✅ TAP ON INPUT BOX TO OPEN KEYBOARD
+          if (x >= W/2-100 && x <= W/2+100 && y >= 260 && y <= 300) {
+            openMobileKeyboard();
           }
           return;
         }
@@ -432,8 +543,13 @@
               passwordInput = '';
               nameToDelete = null;
               passwordMessage = '';
+              closeMobileKeyboard();
             }, 1500);
             return;
+          }
+          // ✅ TAP ON INPUT BOX TO OPEN KEYBOARD
+          if (x >= W/2-100 && x <= W/2+100 && y >= 260 && y <= 300) {
+            openMobileKeyboard();
           }
           return;
         }
@@ -452,6 +568,8 @@
             isEnteringName = true;
             nameInput = '';
             editingName = null;
+            // ✅ OPEN KEYBOARD WHEN ADD NAME IS CLICKED
+            openMobileKeyboard();
             return;
           }
           if (y >= 140 && y <= 460) {
@@ -465,6 +583,8 @@
                   editingName = entry.name;
                   state = 'nameEntry';
                   isEnteringName = true;
+                  // ✅ OPEN KEYBOARD WHEN EDITING NAME
+                  openMobileKeyboard();
                   return;
                 }
                 if (x >= 30 && x < 70) {
@@ -486,6 +606,8 @@
                     passwordMessage = '';
                     rankClickCount = 0;
                     selectedRank = null;
+                    // ✅ OPEN KEYBOARD FOR PASSWORD
+                    openMobileKeyboard();
                     if (rankClickTimer) {
                       clearTimeout(rankClickTimer);
                       rankClickTimer = null;
@@ -558,7 +680,6 @@
       document.addEventListener('keydown', e => {
         const key = e.key;
         if (state === 'nameEntry') {
-          e.preventDefault();
           if (key === 'Enter') {
             if (nameInput.trim() !== '') {
               if (editingName) {
@@ -572,6 +693,7 @@
               state = 'leaderboard';
               isEnteringName = false;
               editingName = null;
+              closeMobileKeyboard();
             }
             return;
           } else if (key === 'Backspace') {
@@ -582,7 +704,6 @@
           return;
         }
         if (state === 'passwordEntry') {
-          e.preventDefault();
           if (key === 'Enter') {
             const enteredPassword = passwordInput.trim();
             if (enteredPassword === DELETE_PASSWORD) {
@@ -598,6 +719,7 @@
               passwordInput = '';
               nameToDelete = null;
               passwordMessage = '';
+              closeMobileKeyboard();
             }, 1500);
             return;
           } else if (key === 'Backspace') {
@@ -661,11 +783,12 @@
         if (editingName) {
           ctx.fillText(`Editing: ${editingName}`, W/2, 210);
         } else {
-          ctx.fillText('Enter your name for the leaderboard:', W/2, 210);
+          ctx.fillText('Enter your name:', W/2, 210);
         }
+        // ✅ INPUT BOX WITH GLOW TO SHOW IT IS ACTIVE
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(W/2-100, 260, 200, 40);
-        ctx.strokeStyle = '#fff';
+        ctx.strokeStyle = '#ffd700';
         ctx.lineWidth = 2;
         ctx.strokeRect(W/2-100, 260, 200, 40);
         ctx.font = 'bold 24px "Arial", sans-serif';
@@ -673,8 +796,8 @@
         ctx.fillText(nameInput + (Date.now() % 1000 < 500 ? '_' : ''), W/2, 285);
         ctx.font = 'bold 16px "Arial", sans-serif';
         ctx.fillStyle = '#ffd700';
-        ctx.fillText('Type using your keyboard', W/2, 330);
-        ctx.fillText('Press Enter or tap SAVE', W/2, 355);
+        ctx.fillText('Tap the box above to type', W/2, 330);
+        ctx.fillText('Press SAVE when done', W/2, 355);
         if (saveNameBtn) {
           ctx.fillStyle = 'rgba(0,0,0,0.25)';
           ctx.beginPath();
@@ -696,17 +819,20 @@
         ctx.fillText(`Delete name: ${nameToDelete || ''}`, W/2, 210);
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(W/2-100, 260, 200, 40);
-        ctx.strokeStyle = '#fff';
+        ctx.strokeStyle = '#ffd700';
         ctx.lineWidth = 2;
         ctx.strokeRect(W/2-100, 260, 200, 40);
         const hiddenPassword = '*'.repeat(passwordInput.length);
         ctx.font = 'bold 24px "Arial", sans-serif';
         ctx.fillStyle = '#fff';
         ctx.fillText(hiddenPassword + (Date.now() % 1000 < 500 ? '_' : ''), W/2, 285);
+        ctx.font = 'bold 16px "Arial", sans-serif';
+        ctx.fillStyle = '#ffd700';
+        ctx.fillText('Tap the box above to type', W/2, 330);
         if (passwordMessage) {
           ctx.font = 'bold 16px "Arial", sans-serif';
           ctx.fillStyle = passwordMessage.includes('Wrong') ? '#ff6b6b' : '#6bff6b';
-          ctx.fillText(passwordMessage, W/2, 330);
+          ctx.fillText(passwordMessage, W/2, 355);
         }
         if (submitPasswordBtn) {
           ctx.fillStyle = 'rgba(0,0,0,0.25)';
